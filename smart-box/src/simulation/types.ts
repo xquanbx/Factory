@@ -28,6 +28,7 @@ export interface Task {
   dropoff: GridPoint;
   createdAt: number;
   assignedVehicleId: string | null;
+  assignedAt: number | null;
   pickedAt: number | null;
   completedAt: number | null;
   status: TaskStatus;

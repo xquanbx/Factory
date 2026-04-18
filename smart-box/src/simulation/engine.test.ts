@@ -68,6 +68,7 @@ describe('dispatching', () => {
         dropoff: { x: 6, y: 3 },
         createdAt: 0,
         assignedVehicleId: null,
+        assignedAt: null,
         pickedAt: null,
         completedAt: null,
         status: 'pending',
@@ -78,6 +79,7 @@ describe('dispatching', () => {
     dispatchPendingTasks(state);
 
     expect(state.tasks[0].assignedVehicleId).toBe('V1');
+    expect(state.tasks[0].assignedAt).toBe(0);
     expect(state.vehicles[0].routeStops).toHaveLength(2);
   });
 
@@ -93,6 +95,7 @@ describe('dispatching', () => {
         dropoff: { x: 4, y: 4 },
         createdAt: 0,
         assignedVehicleId: null,
+        assignedAt: null,
         pickedAt: null,
         completedAt: null,
         status: 'pending',
@@ -121,6 +124,7 @@ describe('dispatching', () => {
         dropoff: { x: 6, y: 4 },
         createdAt: 0,
         assignedVehicleId: 'V1',
+        assignedAt: 0,
         pickedAt: null,
         completedAt: null,
         status: 'assigned',
@@ -133,6 +137,7 @@ describe('dispatching', () => {
         dropoff: { x: 5, y: 4 },
         createdAt: 100,
         assignedVehicleId: null,
+        assignedAt: null,
         pickedAt: null,
         completedAt: null,
         status: 'pending',
@@ -143,6 +148,7 @@ describe('dispatching', () => {
     dispatchPendingTasks(state);
 
     expect(state.tasks[1].assignedVehicleId).toBe('V1');
+    expect(state.tasks[1].assignedAt).toBe(100);
     const pickupIndex = state.vehicles[0].routeStops.findIndex(
       (stop) => stop.taskId === 'B' && stop.kind === 'pickup',
     );
@@ -163,6 +169,7 @@ describe('dispatching', () => {
         dropoff: { x: 6, y: 4 },
         createdAt: 0,
         assignedVehicleId: null,
+        assignedAt: null,
         pickedAt: null,
         completedAt: null,
         status: 'pending',
@@ -242,6 +249,7 @@ describe('simulation controller', () => {
         dropoff: { x: 4, y: 2 },
         createdAt: 0,
         assignedVehicleId: 'V1',
+        assignedAt: 0,
         pickedAt: null,
         completedAt: null,
         status: 'assigned',
@@ -288,6 +296,7 @@ describe('simulation controller', () => {
         dropoff: { x: 4, y: 2 },
         createdAt: 0,
         assignedVehicleId: 'V1',
+        assignedAt: 0,
         pickedAt: 50,
         completedAt: null,
         status: 'picked',
@@ -327,6 +336,7 @@ describe('simulation controller', () => {
         dropoff: { x: 6, y: 4 },
         createdAt: 0,
         assignedVehicleId: 'V1',
+        assignedAt: 0,
         pickedAt: null,
         completedAt: null,
         status: 'assigned',
@@ -339,6 +349,7 @@ describe('simulation controller', () => {
         dropoff: { x: 5, y: 4 },
         createdAt: 100,
         assignedVehicleId: null,
+        assignedAt: null,
         pickedAt: null,
         completedAt: null,
         status: 'pending',
@@ -359,6 +370,7 @@ describe('simulation controller', () => {
     dispatchPendingTasks(state);
 
     expect(state.tasks[1].assignedVehicleId).toBe('V1');
+    expect(state.tasks[1].assignedAt).toBe(100);
     expect(state.vehicles[0].routeStops[0]).toEqual({
       taskId: 'A',
       kind: 'pickup',

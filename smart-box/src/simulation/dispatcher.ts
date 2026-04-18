@@ -169,6 +169,8 @@ function applyAssignment(state: SimulationState, task: Task, candidate: Assignme
       ? {
           ...currentTask,
           assignedVehicleId: candidate.vehicleId,
+          assignedAt:
+            currentTask.assignedAt ?? Math.max(state.simulationTime, currentTask.createdAt),
           status: 'assigned',
         }
       : currentTask,

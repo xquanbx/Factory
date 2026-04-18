@@ -11,6 +11,7 @@ import {
   LinesMesh,
   Mesh,
   MeshBuilder,
+  Quaternion,
   Scene,
   StandardMaterial,
   TransformNode,
@@ -28,6 +29,7 @@ interface BabylonStageProps {
 }
 
 interface SceneRoots {
+  worldRoot: TransformNode;
   mapRoot: TransformNode;
   taskRoot: TransformNode;
   routeRoot: TransformNode;
@@ -175,6 +177,10 @@ function fitCamera(camera: ArcRotateCamera, map: StageViewModel['map']) {
   camera.radius = Math.max(maxSpan * 1.15, 16);
   camera.lowerRadiusLimit = Math.max(maxSpan * 0.72, 12);
   camera.upperRadiusLimit = maxSpan * 1.95;
+}
+
+function updateWorldRotation(root: TransformNode, angle: number) {
+  root.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), angle);
 }
 
 function buildStaticMap(
@@ -528,6 +534,7 @@ export function BabylonStage({ viewModel, showVehicleRoutes }: BabylonStageProps
   const taskMarkerMeshesRef = useRef<Map<string, Mesh>>(new Map());
   const routeMeshesRef = useRef<Map<string, RouteMeshState>>(new Map());
   const vehicleMeshesRef = useRef<Map<string, VehicleMeshState>>(new Map());
+  const worldRollAngleRef = useRef(0);
 
   const mapSignature = useMemo(
     () => `${viewModel.map.preset}:${viewModel.map.width}x${viewModel.map.height}`,
@@ -551,8 +558,9 @@ export function BabylonStage({ viewModel, showVehicleRoutes }: BabylonStageProps
     scene.clearColor = new Color4(0.02, 0.04, 0.09, 1);
 
     const camera = new ArcRotateCamera('factory-camera', -Math.PI / 2, 0.92, 22, Vector3.Zero(), scene);
-    camera.lowerAlphaLimit = -Math.PI / 2 - 0.35;
-    camera.upperAlphaLimit = -Math.PI / 2 + 0.35;
+    // Keep pitch stable for presentation, but let manual horizontal orbit spin freely.
+    camera.lowerAlphaLimit = null;
+    camera.upperAlphaLimit = null;
     camera.lowerBetaLimit = 0.74;
     camera.upperBetaLimit = 1.08;
     camera.allowUpsideDown = false;
@@ -566,10 +574,17 @@ export function BabylonStage({ viewModel, showVehicleRoutes }: BabylonStageProps
     const glow = new GlowLayer('factory-glow', scene);
     glow.intensity = 0.52;
 
+    const worldRoot = new TransformNode('world-root', scene);
+    worldRoot.rotationQuaternion = Quaternion.Identity();
+
     const mapRoot = new TransformNode('map-root', scene);
     const taskRoot = new TransformNode('task-root', scene);
     const routeRoot = new TransformNode('route-root', scene);
     const vehicleRoot = new TransformNode('vehicle-root', scene);
+    mapRoot.parent = worldRoot;
+    taskRoot.parent = worldRoot;
+    routeRoot.parent = worldRoot;
+    vehicleRoot.parent = worldRoot;
 
     engine.runRenderLoop(() => {
       scene.render();
@@ -591,10 +606,11 @@ export function BabylonStage({ viewModel, showVehicleRoutes }: BabylonStageProps
     engineRef.current = engine;
     sceneRef.current = scene;
     cameraRef.current = camera;
-    rootsRef.current = { mapRoot, taskRoot, routeRoot, vehicleRoot };
+    rootsRef.current = { worldRoot, mapRoot, taskRoot, routeRoot, vehicleRoot };
     materialsRef.current = createMaterialCache(scene);
     buildStaticMap(scene, rootsRef.current, materialsRef.current, viewModel);
     fitCamera(camera, viewModel.map);
+    updateWorldRotation(worldRoot, worldRollAngleRef.current);
     buildTaskMarkers(
       scene,
       rootsRef.current,
@@ -642,6 +658,7 @@ export function BabylonStage({ viewModel, showVehicleRoutes }: BabylonStageProps
 
     buildStaticMap(scene, roots, materials, viewModel);
     fitCamera(camera, viewModel.map);
+    updateWorldRotation(roots.worldRoot, worldRollAngleRef.current);
   }, [mapSignature]);
 
   useEffect(() => {

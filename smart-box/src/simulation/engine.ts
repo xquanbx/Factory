@@ -139,6 +139,7 @@ function createTask(state: SimulationState): Task {
     dropoff,
     createdAt: state.simulationTime,
     assignedVehicleId: null,
+    assignedAt: null,
     pickedAt: null,
     completedAt: null,
     status: 'pending',

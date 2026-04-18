@@ -21,6 +21,8 @@ export type {
   SimulationState,
   StopKind,
   Task,
+  TaskStatus,
   TaskLoadLevel,
   Vehicle,
+  VehicleState,
 } from './types';
