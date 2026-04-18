@@ -30,7 +30,7 @@ describe('pathfinding', () => {
       state.map.roadPoints.some((point) => state.map.cells[point.y][point.x] === 'inactive'),
     ).toBe(false);
     expect(
-      state.map.depotPoints.some((point) => state.map.cells[point.y][point.x] === 'inactive'),
+      state.map.vehicleStartPoints.some((point) => state.map.cells[point.y][point.x] === 'inactive'),
     ).toBe(false);
   });
 

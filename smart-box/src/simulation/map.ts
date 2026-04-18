@@ -12,8 +12,7 @@ interface MapDefinition {
   height: number;
   obstacleRects: ObstacleRect[];
   inactiveRects: ObstacleRect[];
-  depotPoints: GridPoint[];
-  spawnPoints: GridPoint[];
+  vehicleStartPoints: GridPoint[];
 }
 
 const MAP_DEFINITIONS: Record<MapPreset, MapDefinition> = {
@@ -28,18 +27,12 @@ const MAP_DEFINITIONS: Record<MapPreset, MapDefinition> = {
       { x: 12, y: 5, width: 2, height: 3 },
     ],
     inactiveRects: [],
-    depotPoints: [
+    vehicleStartPoints: [
       { x: 0, y: 1 },
       { x: 0, y: 2 },
       { x: 0, y: 3 },
       { x: 1, y: 1 },
       { x: 1, y: 2 },
-    ],
-    spawnPoints: [
-      { x: 14, y: 1 },
-      { x: 11, y: 4 },
-      { x: 5, y: 8 },
-      { x: 14, y: 8 },
     ],
   },
   irregular: {
@@ -58,19 +51,12 @@ const MAP_DEFINITIONS: Record<MapPreset, MapDefinition> = {
       { x: 12, y: 8, width: 3, height: 2 },
       { x: 5, y: 10, width: 3, height: 2 },
     ],
-    depotPoints: [
+    vehicleStartPoints: [
       { x: 0, y: 1 },
       { x: 0, y: 2 },
       { x: 0, y: 3 },
       { x: 1, y: 1 },
       { x: 1, y: 2 },
-    ],
-    spawnPoints: [
-      { x: 17, y: 1 },
-      { x: 12, y: 5 },
-      { x: 6, y: 12 },
-      { x: 17, y: 12 },
-      { x: 15, y: 10 },
     ],
   },
 };
@@ -105,14 +91,6 @@ export function createFactoryMap(preset: MapPreset = DEFAULT_MAP_PRESET): Simula
     }
   }
 
-  for (const point of definition.depotPoints) {
-    cells[point.y][point.x] = 'depot';
-  }
-
-  for (const point of definition.spawnPoints) {
-    cells[point.y][point.x] = 'spawn';
-  }
-
   const roadPoints: GridPoint[] = [];
   const taskPoints: GridPoint[] = [];
 
@@ -125,7 +103,7 @@ export function createFactoryMap(preset: MapPreset = DEFAULT_MAP_PRESET): Simula
       const point = { x, y };
       roadPoints.push(point);
 
-      if (!definition.depotPoints.some((depot) => isSamePoint(depot, point))) {
+      if (!definition.vehicleStartPoints.some((startPoint) => isSamePoint(startPoint, point))) {
         taskPoints.push(point);
       }
     }
@@ -138,6 +116,6 @@ export function createFactoryMap(preset: MapPreset = DEFAULT_MAP_PRESET): Simula
     cells,
     roadPoints,
     taskPoints,
-    depotPoints: definition.depotPoints,
+    vehicleStartPoints: definition.vehicleStartPoints,
   };
 }

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { FactoryStage } from './phaser/FactoryStage';
 import {
   createSimulation,
   DEFAULT_SIMULATION_CONFIG,
@@ -10,6 +9,8 @@ import {
   type TaskLoadLevel,
   type Vehicle,
 } from './simulation';
+import { FactoryViewport } from './stage/FactoryViewport';
+import type { StageMode } from './stage/types';
 
 function formatPoint(x: number, y: number) {
   return `(${x}, ${y})`;
@@ -238,6 +239,7 @@ function App() {
   const { snapshot, controller } = useSimulation();
   const [activeTab, setActiveTab] = useState<'tasks' | 'instructions' | 'vehicles'>('tasks');
   const [showVehicleRoutes, setShowVehicleRoutes] = useState(true);
+  const [stageMode, setStageMode] = useState<StageMode>('2d');
   const recentTasks = [...snapshot.tasks]
     .filter((task) => task.status !== 'completed')
     .sort((a, b) => b.createdAt - a.createdAt)
@@ -262,6 +264,30 @@ function App() {
               >
                 显示轨迹
               </button>
+              <div className="stage-mode-control">
+                <div className="stage-mode-meta">
+                  <span className="task-load-label">视图模式</span>
+                  <small>{stageMode === '2d' ? 'Phaser 2D' : 'Babylon 3D'}</small>
+                </div>
+                <div className="stage-mode-options">
+                  <button
+                    type="button"
+                    aria-pressed={stageMode === '2d'}
+                    className={`stage-mode-button ${stageMode === '2d' ? 'active' : ''}`}
+                    onClick={() => setStageMode('2d')}
+                  >
+                    2D
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={stageMode === '3d'}
+                    className={`stage-mode-button ${stageMode === '3d' ? 'active' : ''}`}
+                    onClick={() => setStageMode('3d')}
+                  >
+                    3D
+                  </button>
+                </div>
+              </div>
               <div className="map-preset-control">
                 <div className="map-preset-meta">
                   <span className="task-load-label">地图参数</span>
@@ -373,7 +399,11 @@ function App() {
               </div>
             </div>
 
-            <FactoryStage snapshot={snapshot} showVehicleRoutes={showVehicleRoutes} />
+            <FactoryViewport
+              snapshot={snapshot}
+              showVehicleRoutes={showVehicleRoutes}
+              stageMode={stageMode}
+            />
           </div>
         </div>
       </section>

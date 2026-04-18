@@ -19,6 +19,7 @@ export type {
   SimulationMetrics,
   SimulationSnapshot,
   SimulationState,
+  StopKind,
   Task,
   TaskLoadLevel,
   Vehicle,

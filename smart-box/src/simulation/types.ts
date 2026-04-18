@@ -1,4 +1,4 @@
-export type GridCell = 'road' | 'obstacle' | 'inactive' | 'depot' | 'spawn';
+export type GridCell = 'road' | 'obstacle' | 'inactive';
 
 export type TaskStatus = 'pending' | 'assigned' | 'picked' | 'completed';
 
@@ -71,7 +71,7 @@ export interface SimulationMap {
   cells: GridCell[][];
   roadPoints: GridPoint[];
   taskPoints: GridPoint[];
-  depotPoints: GridPoint[];
+  vehicleStartPoints: GridPoint[];
 }
 
 export interface SimulationSnapshot {

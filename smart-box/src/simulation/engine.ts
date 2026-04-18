@@ -95,7 +95,11 @@ function buildVehicle(id: number, position: GridPoint, config: SimulationConfig)
 function createInitialState(config: SimulationConfig): SimulationState {
   const map = createFactoryMap(config.initialMapPreset);
   const vehicles = Array.from({ length: config.vehicleCount }, (_, index) =>
-    buildVehicle(index, map.depotPoints[index % map.depotPoints.length], config),
+    buildVehicle(
+      index,
+      map.vehicleStartPoints[index % map.vehicleStartPoints.length],
+      config,
+    ),
   );
 
   return {

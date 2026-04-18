@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
-import type { SimulationSnapshot } from '../simulation';
-import { FactoryScene, getSceneSize } from './FactoryScene';
+import { getStageSceneSize, type StageViewModel } from '../stage/view-model';
+import { FactoryScene } from './FactoryScene';
 
 interface FactoryStageProps {
-  snapshot: SimulationSnapshot;
+  viewModel: StageViewModel;
   showVehicleRoutes: boolean;
 }
 
@@ -16,7 +16,7 @@ function getHighDpiResolution() {
   return Math.min(window.devicePixelRatio || 1, 2.5);
 }
 
-export function FactoryStage({ snapshot, showVehicleRoutes }: FactoryStageProps) {
+export function FactoryStage({ viewModel, showVehicleRoutes }: FactoryStageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<FactoryScene | null>(null);
@@ -28,7 +28,7 @@ export function FactoryStage({ snapshot, showVehicleRoutes }: FactoryStageProps)
     }
 
     const scene = new FactoryScene();
-    const size = getSceneSize(snapshot);
+    const size = getStageSceneSize(viewModel);
     const resolution = getHighDpiResolution();
     sceneRef.current = scene;
 
@@ -89,18 +89,18 @@ export function FactoryStage({ snapshot, showVehicleRoutes }: FactoryStageProps)
     const scene = sceneRef.current;
     const game = gameRef.current;
     if (scene) {
-      scene.setSnapshot(snapshot);
+      scene.setViewModel(viewModel);
       scene.setDisplayOptions({ showVehicleRoutes });
     }
 
     if (game) {
-      const size = getSceneSize(snapshot);
+      const size = getStageSceneSize(viewModel);
       if (game.scale.width !== size.width || game.scale.height !== size.height) {
         game.scale.resize(size.width, size.height);
         game.scale.refresh();
       }
     }
-  }, [snapshot, showVehicleRoutes]);
+  }, [viewModel, showVehicleRoutes]);
 
-  return <div ref={containerRef} className="phaser-canvas" />;
+  return <div ref={containerRef} className="stage-canvas phaser-canvas" />;
 }

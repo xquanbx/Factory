@@ -1,13 +1,15 @@
 import Phaser from 'phaser';
-import { findShortestPath } from '../simulation';
-import type { GridCell, GridPoint, SimulationMap, SimulationSnapshot, Task, Vehicle } from '../simulation';
+import {
+  STAGE_CELL_SIZE as CELL_SIZE,
+  STAGE_PADDING as PADDING,
+  type StagePoint,
+  type StageViewModel,
+} from '../stage/view-model';
 
-const CELL_SIZE = 68;
-const PADDING = 32;
 const ROAD_COLOR = 0x0f172a;
 const CARGO_DOT_RADIUS = 5.8;
 
-function cellFill(cell: GridCell) {
+function cellFill(cell: StageViewModel['map']['cells'][number]['cell']) {
   switch (cell) {
     case 'obstacle':
       return 0x1e293b;
@@ -39,84 +41,15 @@ function drawInactiveCellHatch(
   }
 }
 
-function taskCenterX(task: Task, kind: 'pickup' | 'dropoff') {
-  const point = kind === 'pickup' ? task.pickup : task.dropoff;
-  return PADDING + point.x * CELL_SIZE + CELL_SIZE / 2;
-}
-
-function taskCenterY(task: Task, kind: 'pickup' | 'dropoff') {
-  const point = kind === 'pickup' ? task.pickup : task.dropoff;
-  return PADDING + point.y * CELL_SIZE + CELL_SIZE / 2;
-}
-
-function vehicleX(vehicle: Vehicle) {
-  return PADDING + vehicle.displayPosition.x * CELL_SIZE + CELL_SIZE / 2;
-}
-
-function vehicleY(vehicle: Vehicle) {
-  return PADDING + vehicle.displayPosition.y * CELL_SIZE + CELL_SIZE / 2;
-}
-
-function pointToPixel(point: { x: number; y: number }) {
+function pointToPixel(point: StagePoint) {
   return {
     x: PADDING + point.x * CELL_SIZE + CELL_SIZE / 2,
     y: PADDING + point.y * CELL_SIZE + CELL_SIZE / 2,
   };
 }
 
-function onboardTaskColors(vehicle: Vehicle, tasks: Task[]) {
-  return vehicle.onboardTaskIds
-    .map((taskId) => tasks.find((task) => task.id === taskId)?.color)
-    .filter((color): color is string => Boolean(color));
-}
-
-function vehicleBodyColor(vehicle: Vehicle) {
+function vehicleBodyColor(vehicle: StageViewModel['vehicles'][number]) {
   return Phaser.Display.Color.HexStringToColor(vehicle.color).color;
-}
-
-function getTaskColor(tasks: Task[], taskId: string | undefined) {
-  if (!taskId) {
-    return null;
-  }
-
-  return tasks.find((task) => task.id === taskId)?.color ?? null;
-}
-
-function appendPathPoints(target: GridPoint[], path: GridPoint[]) {
-  if (path.length === 0) {
-    return;
-  }
-
-  const startIndex = target.length === 0 ? 0 : 1;
-  for (let index = startIndex; index < path.length; index += 1) {
-    target.push(path[index]);
-  }
-}
-
-function buildVehicleRoutePoints(map: SimulationMap, vehicle: Vehicle) {
-  const route: { x: number; y: number }[] = [{ ...vehicle.displayPosition }];
-  let cursor = { ...vehicle.position };
-  let stopStartIndex = 0;
-
-  if (vehicle.currentPath.length > 1 && vehicle.pathIndex < vehicle.currentPath.length - 1) {
-    const remainingCurrentPath = vehicle.currentPath.slice(vehicle.pathIndex + 1);
-    appendPathPoints(route as GridPoint[], remainingCurrentPath);
-    cursor = { ...remainingCurrentPath[remainingCurrentPath.length - 1] };
-    stopStartIndex = vehicle.routeStops.length > 0 ? 1 : 0;
-  }
-
-  for (let index = stopStartIndex; index < vehicle.routeStops.length; index += 1) {
-    const stop = vehicle.routeStops[index];
-    const path = findShortestPath(map, cursor, stop.point);
-    if (!path) {
-      continue;
-    }
-
-    appendPathPoints(route as GridPoint[], path);
-    cursor = { ...stop.point };
-  }
-
-  return route;
 }
 
 function drawDashedSegment(
@@ -156,12 +89,9 @@ function drawDashedSegment(
 
 function drawVehicleRoute(
   graphics: Phaser.GameObjects.Graphics,
-  map: SimulationMap,
-  vehicle: Vehicle,
+  routePoints: StagePoint[],
   color: number,
 ) {
-  const routePoints = buildVehicleRoutePoints(map, vehicle);
-
   if (routePoints.length < 2) {
     return;
   }
@@ -182,7 +112,7 @@ function drawVehicleRoute(
 }
 
 export class FactoryScene extends Phaser.Scene {
-  private snapshot: SimulationSnapshot | null = null;
+  private viewModel: StageViewModel | null = null;
   private showVehicleRoutes = true;
   private graphics!: Phaser.GameObjects.Graphics;
   private vehicleLayer!: Phaser.GameObjects.Container;
@@ -197,21 +127,21 @@ export class FactoryScene extends Phaser.Scene {
     this.graphics = this.add.graphics();
     this.vehicleLayer = this.add.container();
     this.overlayLayer = this.add.container();
-    this.renderSnapshot();
+    this.renderViewModel();
   }
 
-  setSnapshot(snapshot: SimulationSnapshot) {
-    this.snapshot = snapshot;
-    this.renderSnapshot();
+  setViewModel(viewModel: StageViewModel) {
+    this.viewModel = viewModel;
+    this.renderViewModel();
   }
 
   setDisplayOptions(options: { showVehicleRoutes: boolean }) {
     this.showVehicleRoutes = options.showVehicleRoutes;
-    this.renderSnapshot();
+    this.renderViewModel();
   }
 
-  private renderSnapshot() {
-    if (!this.graphics || !this.snapshot) {
+  private renderViewModel() {
+    if (!this.graphics || !this.viewModel) {
       return;
     }
 
@@ -219,83 +149,66 @@ export class FactoryScene extends Phaser.Scene {
     this.vehicleLayer.removeAll(true);
     this.overlayLayer.removeAll(true);
 
-    const { map, tasks, vehicles } = this.snapshot;
-
     this.graphics.fillStyle(0x020617, 1);
     this.graphics.fillRoundedRect(
       0,
       0,
-      map.width * CELL_SIZE + PADDING * 2,
-      map.height * CELL_SIZE + PADDING * 2,
+      this.viewModel.map.width * CELL_SIZE + PADDING * 2,
+      this.viewModel.map.height * CELL_SIZE + PADDING * 2,
       24,
     );
 
-    for (let y = 0; y < map.height; y += 1) {
-      for (let x = 0; x < map.width; x += 1) {
-        const px = PADDING + x * CELL_SIZE;
-        const py = PADDING + y * CELL_SIZE;
-        const cell = map.cells[y][x];
-        const cellSize = CELL_SIZE - 2;
+    for (const cell of this.viewModel.map.cells) {
+      const px = PADDING + cell.x * CELL_SIZE;
+      const py = PADDING + cell.y * CELL_SIZE;
+      const cellSize = CELL_SIZE - 2;
 
-        this.graphics.fillStyle(cellFill(cell), 1);
-        this.graphics.fillRoundedRect(px, py, cellSize, cellSize, 10);
+      this.graphics.fillStyle(cellFill(cell.cell), 1);
+      this.graphics.fillRoundedRect(px, py, cellSize, cellSize, 10);
 
-        if (cell === 'inactive') {
-          drawInactiveCellHatch(this.graphics, px + 1, py + 1, cellSize - 2);
-          this.graphics.lineStyle(1, 0x94a3b8, 0.75);
-          this.graphics.strokeRoundedRect(px, py, cellSize, cellSize, 10);
-          continue;
-        }
-
-        this.graphics.lineStyle(1, 0x334155, 0.85);
+      if (cell.cell === 'inactive') {
+        drawInactiveCellHatch(this.graphics, px + 1, py + 1, cellSize - 2);
+        this.graphics.lineStyle(1, 0x94a3b8, 0.75);
         this.graphics.strokeRoundedRect(px, py, cellSize, cellSize, 10);
+        continue;
       }
+
+      this.graphics.lineStyle(1, 0x334155, 0.85);
+      this.graphics.strokeRoundedRect(px, py, cellSize, cellSize, 10);
     }
 
-    for (const task of tasks.filter((item) => item.status !== 'completed')) {
-      const pickupX = taskCenterX(task, 'pickup');
-      const pickupY = taskCenterY(task, 'pickup');
-      const dropoffX = taskCenterX(task, 'dropoff');
-      const dropoffY = taskCenterY(task, 'dropoff');
-      const color = Phaser.Display.Color.HexStringToColor(task.color).color;
-      const pickupVisible = task.status !== 'picked';
+    for (const marker of this.viewModel.taskMarkers) {
+      const point = pointToPixel(marker.point);
+      const color = Phaser.Display.Color.HexStringToColor(marker.color).color;
+
+      if (marker.kind === 'pickup') {
+        this.graphics.fillStyle(color, 1);
+        this.graphics.fillCircle(point.x, point.y, CARGO_DOT_RADIUS);
+        continue;
+      }
 
       this.graphics.lineStyle(3, color, 1);
-      this.graphics.strokeCircle(dropoffX, dropoffY, CARGO_DOT_RADIUS + 2.4);
-
-      if (pickupVisible) {
-        this.graphics.fillStyle(color, 1);
-        this.graphics.fillCircle(pickupX, pickupY, CARGO_DOT_RADIUS);
-      }
+      this.graphics.strokeCircle(point.x, point.y, CARGO_DOT_RADIUS + 2.4);
     }
 
     if (this.showVehicleRoutes) {
-      for (const vehicle of vehicles) {
-        if (vehicle.routeStops.length === 0) {
+      for (const vehicle of this.viewModel.vehicles) {
+        if (vehicle.routePoints.length < 2) {
           continue;
         }
 
         const routeGraphics = this.add.graphics();
-        drawVehicleRoute(routeGraphics, map, vehicle, vehicleBodyColor(vehicle));
+        drawVehicleRoute(routeGraphics, vehicle.routePoints, vehicleBodyColor(vehicle));
         this.overlayLayer.add(routeGraphics);
       }
     }
 
-    for (const vehicle of vehicles) {
-      const x = vehicleX(vehicle);
-      const y = vehicleY(vehicle);
+    for (const vehicle of this.viewModel.vehicles) {
+      const point = pointToPixel(vehicle.position);
+      const x = point.x;
+      const y = point.y;
       const color = vehicleBodyColor(vehicle);
-      const cargoColors = onboardTaskColors(vehicle, tasks);
       const bodySize = CELL_SIZE - 18;
-      const currentTaskColor = getTaskColor(tasks, vehicle.routeStops[0]?.taskId);
-      const operationRatio =
-        vehicle.activeStopKind && this.snapshot.serviceDurationMs > 0
-          ? Phaser.Math.Clamp(
-              1 - vehicle.operationRemainingMs / this.snapshot.serviceDurationMs,
-              0,
-              1,
-            )
-          : null;
       const body = this.add.graphics();
       body.fillStyle(color, 0.2);
       body.fillRoundedRect(
@@ -333,7 +246,7 @@ export class FactoryScene extends Phaser.Scene {
       ];
 
       const slots = slotOffsets.map((offset, index) => {
-        const cargoColor = cargoColors[index];
+        const cargoColor = vehicle.cargoSlots[index] ?? null;
         const slot = this.add.circle(
           x + offset.x,
           y + offset.y,
@@ -347,18 +260,13 @@ export class FactoryScene extends Phaser.Scene {
 
       const vehicleElements: Phaser.GameObjects.GameObject[] = [body, innerPanel, ...slots];
 
-      if (
-        currentTaskColor &&
-        operationRatio !== null &&
-        (vehicle.state === 'loading' || vehicle.state === 'unloading')
-      ) {
+      if (vehicle.progress) {
         const barWidth = innerSize - 8;
         const barHeight = 8;
         const barX = x - barWidth / 2;
         const barY = y + innerSize / 2 - barHeight - 4;
-        const taskColor = Phaser.Display.Color.HexStringToColor(currentTaskColor).color;
-        const filledRatio = vehicle.state === 'loading' ? operationRatio : 1 - operationRatio;
-        const filledWidth = Math.max(0, barWidth * filledRatio);
+        const taskColor = Phaser.Display.Color.HexStringToColor(vehicle.progress.color).color;
+        const filledWidth = Math.max(0, barWidth * vehicle.progress.filledRatio);
 
         const progressTrack = this.add.graphics();
         progressTrack.fillStyle(0x020617, 0.82);
@@ -377,17 +285,5 @@ export class FactoryScene extends Phaser.Scene {
 
       this.vehicleLayer.add(vehicleElements);
     }
-
   }
-}
-
-export function getSceneSize(snapshot: SimulationSnapshot | null) {
-  if (!snapshot) {
-    return { width: 1160, height: 820 };
-  }
-
-  return {
-    width: snapshot.map.width * CELL_SIZE + PADDING * 2,
-    height: snapshot.map.height * CELL_SIZE + PADDING * 2,
-  };
 }
