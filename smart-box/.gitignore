@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# local environment
+.env
+.env.*
+!.env.example
+
+# TypeScript incremental/build artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# editor and OS files
+.DS_Store
+.idea/
+.vscode/
