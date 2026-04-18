@@ -1,10 +1,14 @@
-export type GridCell = 'road' | 'obstacle' | 'depot' | 'spawn';
+export type GridCell = 'road' | 'obstacle' | 'inactive' | 'depot' | 'spawn';
 
 export type TaskStatus = 'pending' | 'assigned' | 'picked' | 'completed';
 
-export type VehicleState = 'idle' | 'to-pickup' | 'delivering';
+export type VehicleState = 'idle' | 'to-pickup' | 'loading' | 'delivering' | 'unloading';
 
 export type StopKind = 'pickup' | 'dropoff';
+
+export type TaskLoadLevel = 'low' | 'medium' | 'high';
+
+export type MapPreset = 'standard' | 'irregular';
 
 export interface GridPoint {
   x: number;
@@ -43,6 +47,8 @@ export interface Vehicle {
   routeStops: RouteStop[];
   onboardTaskIds: string[];
   state: VehicleState;
+  activeStopKind: StopKind | null;
+  operationRemainingMs: number;
   currentPath: GridPoint[];
   pathIndex: number;
   segmentProgress: number;
@@ -59,6 +65,7 @@ export interface SimulationMetrics {
 }
 
 export interface SimulationMap {
+  preset: MapPreset;
   width: number;
   height: number;
   cells: GridCell[][];
@@ -73,6 +80,10 @@ export interface SimulationSnapshot {
   vehicles: Vehicle[];
   metrics: SimulationMetrics;
   simulationTime: number;
+  serviceDurationMs: number;
+  taskLoadLevel: TaskLoadLevel;
+  mapPreset: MapPreset;
+  targetTasksPerMinute: number;
   speed: number;
   isRunning: boolean;
 }
@@ -86,6 +97,9 @@ export interface SimulationConfig {
   maxTaskIntervalMs: number;
   stepMs: number;
   baseCellTravelMs: number;
+  serviceDurationMs: number;
+  initialTaskLoadLevel: TaskLoadLevel;
+  initialMapPreset: MapPreset;
   initialSpeed: number;
   rng: () => number;
 }
@@ -96,6 +110,8 @@ export interface SimulationState {
   tasks: Task[];
   vehicles: Vehicle[];
   simulationTime: number;
+  taskLoadLevel: TaskLoadLevel;
+  mapPreset: MapPreset;
   speed: number;
   isRunning: boolean;
   nextTaskId: number;
@@ -109,6 +125,8 @@ export interface SimulationController {
   start: () => void;
   pause: () => void;
   reset: () => void;
+  setMapPreset: (preset: MapPreset) => void;
+  setTaskLoadLevel: (level: TaskLoadLevel) => void;
   setSpeed: (multiplier: number) => void;
   subscribe: (listener: (snapshot: SimulationSnapshot) => void) => () => void;
   getSnapshot: () => SimulationSnapshot;

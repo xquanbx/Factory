@@ -17,7 +17,8 @@ function isWalkable(map: SimulationMap, point: GridPoint) {
     point.x < map.width &&
     point.y >= 0 &&
     point.y < map.height &&
-    map.cells[point.y][point.x] !== 'obstacle'
+    map.cells[point.y][point.x] !== 'obstacle' &&
+    map.cells[point.y][point.x] !== 'inactive'
   );
 }
 

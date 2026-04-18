@@ -1,8 +1,9 @@
 import { dispatchPendingTasks, hasAdditionalAssignedTasks } from './dispatcher';
-import { createFactoryMap } from './map';
+import { createFactoryMap, DEFAULT_MAP_PRESET } from './map';
 import { findShortestPath } from './pathfinding';
 import type {
   GridPoint,
+  MapPreset,
   RouteStop,
   SimulationConfig,
   SimulationController,
@@ -10,6 +11,7 @@ import type {
   SimulationSnapshot,
   SimulationState,
   Task,
+  TaskLoadLevel,
   Vehicle,
   VehicleState,
 } from './types';
@@ -30,16 +32,24 @@ const TASK_COLORS = [
 ];
 
 const VEHICLE_COLORS = ['#93c5fd', '#fca5a5', '#86efac', '#fde68a', '#c4b5fd'];
+export const TASK_LOAD_TARGETS: Record<TaskLoadLevel, number> = {
+  low: 10,
+  medium: 30,
+  high: 60,
+};
 
 export const DEFAULT_SIMULATION_CONFIG: SimulationConfig = {
   width: 16,
   height: 10,
   vehicleCount: 5,
-  vehicleCapacity: 3,
+  vehicleCapacity: 4,
   minTaskIntervalMs: 1500,
   maxTaskIntervalMs: 3500,
   stepMs: 40,
   baseCellTravelMs: 420,
+  serviceDurationMs: 900,
+  initialTaskLoadLevel: 'medium',
+  initialMapPreset: DEFAULT_MAP_PRESET,
   initialSpeed: 1,
   rng: Math.random,
 };
@@ -48,9 +58,18 @@ function clonePoint(point: GridPoint) {
   return { ...point };
 }
 
-function nextTaskDelay(config: SimulationConfig) {
-  const span = config.maxTaskIntervalMs - config.minTaskIntervalMs;
-  return config.minTaskIntervalMs + config.rng() * span;
+export function estimateTasksPerMinute(
+  _config: Pick<SimulationConfig, 'minTaskIntervalMs' | 'maxTaskIntervalMs'>,
+  taskLoadLevel: TaskLoadLevel,
+) {
+  return TASK_LOAD_TARGETS[taskLoadLevel];
+}
+
+function nextTaskDelay(config: SimulationConfig, taskLoadLevel: TaskLoadLevel) {
+  const targetTasksPerMinute = estimateTasksPerMinute(config, taskLoadLevel);
+  const averageIntervalMs = 60000 / Math.max(targetTasksPerMinute, 1);
+  const jitter = 0.7 + config.rng() * 0.6;
+  return averageIntervalMs * jitter;
 }
 
 function buildVehicle(id: number, position: GridPoint, config: SimulationConfig): Vehicle {
@@ -64,6 +83,8 @@ function buildVehicle(id: number, position: GridPoint, config: SimulationConfig)
     routeStops: [],
     onboardTaskIds: [],
     state: 'idle',
+    activeStopKind: null,
+    operationRemainingMs: 0,
     currentPath: [],
     pathIndex: 0,
     segmentProgress: 0,
@@ -72,7 +93,7 @@ function buildVehicle(id: number, position: GridPoint, config: SimulationConfig)
 }
 
 function createInitialState(config: SimulationConfig): SimulationState {
-  const map = createFactoryMap();
+  const map = createFactoryMap(config.initialMapPreset);
   const vehicles = Array.from({ length: config.vehicleCount }, (_, index) =>
     buildVehicle(index, map.depotPoints[index % map.depotPoints.length], config),
   );
@@ -83,10 +104,12 @@ function createInitialState(config: SimulationConfig): SimulationState {
     tasks: [],
     vehicles,
     simulationTime: 0,
+    taskLoadLevel: config.initialTaskLoadLevel,
+    mapPreset: config.initialMapPreset,
     speed: config.initialSpeed,
     isRunning: false,
     nextTaskId: 1,
-    nextTaskAt: nextTaskDelay(config),
+    nextTaskAt: nextTaskDelay(config, config.initialTaskLoadLevel),
     totalWaitMs: 0,
     totalDeliveryMs: 0,
     batchedCompletions: 0,
@@ -124,6 +147,14 @@ function getTaskById(state: SimulationState, taskId: string) {
 }
 
 function updateVehicleState(vehicle: Vehicle): VehicleState {
+  if (vehicle.activeStopKind === 'pickup' && vehicle.operationRemainingMs > 0) {
+    return 'loading';
+  }
+
+  if (vehicle.activeStopKind === 'dropoff' && vehicle.operationRemainingMs > 0) {
+    return 'unloading';
+  }
+
   if (vehicle.routeStops.length === 0) {
     return 'idle';
   }
@@ -170,12 +201,25 @@ function toSnapshot(state: SimulationState): SimulationSnapshot {
     })),
     metrics: updateMetrics(state),
     simulationTime: state.simulationTime,
+    serviceDurationMs: state.config.serviceDurationMs,
+    taskLoadLevel: state.taskLoadLevel,
+    mapPreset: state.mapPreset,
+    targetTasksPerMinute: estimateTasksPerMinute(state.config, state.taskLoadLevel),
     speed: state.speed,
     isRunning: state.isRunning,
   };
 }
 
 function ensureVehiclePath(state: SimulationState, vehicle: Vehicle) {
+  if (vehicle.activeStopKind) {
+    vehicle.currentPath = [];
+    vehicle.pathIndex = 0;
+    vehicle.segmentProgress = 0;
+    vehicle.displayPosition = clonePoint(vehicle.position);
+    vehicle.state = updateVehicleState(vehicle);
+    return;
+  }
+
   if (vehicle.routeStops.length === 0) {
     vehicle.currentPath = [];
     vehicle.pathIndex = 0;
@@ -202,6 +246,29 @@ function ensureVehiclePath(state: SimulationState, vehicle: Vehicle) {
   vehicle.segmentProgress = 0;
   vehicle.displayPosition = clonePoint(vehicle.position);
   vehicle.state = updateVehicleState(vehicle);
+}
+
+function beginStopOperation(state: SimulationState, vehicle: Vehicle) {
+  if (vehicle.activeStopKind || vehicle.routeStops.length === 0) {
+    return false;
+  }
+
+  const currentStop = vehicle.routeStops[0];
+  if (
+    vehicle.position.x !== currentStop.point.x ||
+    vehicle.position.y !== currentStop.point.y
+  ) {
+    return false;
+  }
+
+  vehicle.activeStopKind = currentStop.kind;
+  vehicle.operationRemainingMs = state.config.serviceDurationMs;
+  vehicle.currentPath = [];
+  vehicle.pathIndex = 0;
+  vehicle.segmentProgress = 0;
+  vehicle.displayPosition = clonePoint(vehicle.position);
+  vehicle.state = updateVehicleState(vehicle);
+  return true;
 }
 
 function completePickup(state: SimulationState, vehicle: Vehicle, stop: RouteStop) {
@@ -249,18 +316,16 @@ function completeDropoff(state: SimulationState, vehicle: Vehicle, stop: RouteSt
   }
 }
 
-function handleArrivedStop(state: SimulationState, vehicle: Vehicle) {
-  if (vehicle.routeStops.length === 0) {
+function finishStopOperation(state: SimulationState, vehicle: Vehicle) {
+  if (!vehicle.activeStopKind || vehicle.routeStops.length === 0) {
+    return false;
+  }
+
+  if (vehicle.operationRemainingMs > 0) {
     return false;
   }
 
   const currentStop = vehicle.routeStops[0];
-  if (
-    vehicle.position.x !== currentStop.point.x ||
-    vehicle.position.y !== currentStop.point.y
-  ) {
-    return false;
-  }
 
   if (currentStop.kind === 'pickup') {
     completePickup(state, vehicle, currentStop);
@@ -269,6 +334,8 @@ function handleArrivedStop(state: SimulationState, vehicle: Vehicle) {
   }
 
   vehicle.routeStops = vehicle.routeStops.slice(1);
+  vehicle.activeStopKind = null;
+  vehicle.operationRemainingMs = 0;
   vehicle.currentPath = [];
   vehicle.pathIndex = 0;
   vehicle.segmentProgress = 0;
@@ -280,15 +347,34 @@ function handleArrivedStop(state: SimulationState, vehicle: Vehicle) {
 function advanceVehicle(state: SimulationState, vehicle: Vehicle, deltaMs: number) {
   let remaining = deltaMs;
 
-  const isBusy = vehicle.routeStops.length > 0 || vehicle.load > 0;
+  const isBusy =
+    vehicle.routeStops.length > 0 ||
+    vehicle.load > 0 ||
+    vehicle.activeStopKind !== null ||
+    vehicle.operationRemainingMs > 0;
   if (isBusy) {
     vehicle.busyTime += deltaMs;
   }
 
   while (remaining > 0) {
+    if (vehicle.activeStopKind) {
+      const consumed = Math.min(remaining, vehicle.operationRemainingMs);
+      vehicle.operationRemainingMs = Math.max(0, vehicle.operationRemainingMs - consumed);
+      remaining -= consumed;
+      vehicle.displayPosition = clonePoint(vehicle.position);
+      vehicle.state = updateVehicleState(vehicle);
+
+      if (vehicle.operationRemainingMs <= 0) {
+        finishStopOperation(state, vehicle);
+        continue;
+      }
+
+      break;
+    }
+
     ensureVehiclePath(state, vehicle);
 
-    if (handleArrivedStop(state, vehicle)) {
+    if (beginStopOperation(state, vehicle)) {
       continue;
     }
 
@@ -318,7 +404,9 @@ function advanceVehicle(state: SimulationState, vehicle: Vehicle, deltaMs: numbe
       vehicle.segmentProgress = 0;
 
       if (vehicle.pathIndex >= vehicle.currentPath.length - 1) {
-        handleArrivedStop(state, vehicle);
+        if (beginStopOperation(state, vehicle)) {
+          continue;
+        }
       }
     }
   }
@@ -338,7 +426,7 @@ export function stepSimulation(state: SimulationState, frameMs: number) {
   while (state.simulationTime >= state.nextTaskAt) {
     state.tasks = [...state.tasks, createTask(state)];
     state.nextTaskId += 1;
-    state.nextTaskAt += nextTaskDelay(state.config);
+    state.nextTaskAt += nextTaskDelay(state.config, state.taskLoadLevel);
     generatedTask = true;
   }
 
@@ -361,7 +449,7 @@ export function stepSimulation(state: SimulationState, frameMs: number) {
 export function createSimulation(
   overrides: Partial<SimulationConfig> = {},
 ): SimulationController {
-  const config = {
+  const config: SimulationConfig = {
     ...DEFAULT_SIMULATION_CONFIG,
     ...overrides,
   };
@@ -392,6 +480,25 @@ export function createSimulation(
     }, config.stepMs);
   };
 
+  const resetWithCurrentControls = () => {
+    const shouldResume = state.isRunning;
+    const preservedTaskLoadLevel = state.taskLoadLevel;
+    const preservedMapPreset = state.mapPreset;
+
+    stopTimer();
+    config.initialTaskLoadLevel = preservedTaskLoadLevel;
+    config.initialMapPreset = preservedMapPreset;
+    state = createInitialState(config);
+    state.speed = config.initialSpeed;
+    state.isRunning = shouldResume;
+
+    if (shouldResume) {
+      startTimer();
+    }
+
+    notify();
+  };
+
   return {
     start() {
       if (state.isRunning) {
@@ -408,14 +515,23 @@ export function createSimulation(
       notify();
     },
     reset() {
-      const shouldResume = state.isRunning;
-      stopTimer();
-      state = createInitialState(config);
-      state.speed = config.initialSpeed;
-      state.isRunning = shouldResume;
-      if (shouldResume) {
-        startTimer();
+      resetWithCurrentControls();
+    },
+    setMapPreset(preset: MapPreset) {
+      if (state.mapPreset === preset) {
+        return;
       }
+
+      state.mapPreset = preset;
+      resetWithCurrentControls();
+    },
+    setTaskLoadLevel(level: TaskLoadLevel) {
+      if (state.taskLoadLevel === level) {
+        return;
+      }
+
+      state.taskLoadLevel = level;
+      state.nextTaskAt = state.simulationTime + nextTaskDelay(state.config, level);
       notify();
     },
     setSpeed(multiplier: number) {

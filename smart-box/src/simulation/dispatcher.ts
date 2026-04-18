@@ -94,8 +94,13 @@ function findInsertionCandidate(
   }
 
   let best: AssignmentCandidate | null = null;
+  const insertionStartIndex = vehicle.activeStopKind ? 1 : 0;
 
-  for (let pickupIndex = 0; pickupIndex <= vehicle.routeStops.length; pickupIndex += 1) {
+  for (
+    let pickupIndex = insertionStartIndex;
+    pickupIndex <= vehicle.routeStops.length;
+    pickupIndex += 1
+  ) {
     for (
       let dropoffIndex = pickupIndex + 1;
       dropoffIndex <= vehicle.routeStops.length + 1;
@@ -177,7 +182,13 @@ function applyAssignment(state: SimulationState, task: Task, candidate: Assignme
           currentPath: [],
           pathIndex: 0,
           segmentProgress: 0,
-          state: candidate.routeStops[0]?.kind === 'pickup' ? 'to-pickup' : 'delivering',
+          state: vehicle.activeStopKind
+            ? vehicle.activeStopKind === 'pickup'
+              ? 'loading'
+              : 'unloading'
+            : candidate.routeStops[0]?.kind === 'pickup'
+              ? 'to-pickup'
+              : 'delivering',
         }
       : vehicle,
   );
